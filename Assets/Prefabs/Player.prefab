@@ -385,3 +385,4 @@ MonoBehaviour:
   ShowTopMostFoldoutHeaderGroup: 1
   _moveSpeed: 5
   _nameLabel: {fileID: 6036331550974895967}
+  _coinPrefab: {fileID: 6247618893319117698, guid: 8d9e064d406117a448dad710fea195c5, type: 3}

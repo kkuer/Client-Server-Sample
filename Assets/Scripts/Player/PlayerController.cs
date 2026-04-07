@@ -18,6 +18,10 @@ public class PlayerController : NetworkBehaviour
     // This label floats above the capsule and shows the player name.
     [SerializeField] private TextMeshPro _nameLabel;
 
+    // Drag the Coin prefab here in the Player prefab Inspector.
+    // The server will instantiate and spawn a copy of this prefab when the player fires.
+    [SerializeField] private GameObject _coinPrefab;
+
     // Static bridge: NetworkManagerUI sets this before the player prefab spawns
     // so the spawned PlayerController can read the local player's chosen name
     // without needing a direct reference to the UI.
@@ -63,6 +67,7 @@ public class PlayerController : NetworkBehaviour
     );
 
     private InputAction _moveAction;
+    private InputAction _fireAction;
 
     // Cached reference to this object's CapsuleCollider, used for the pre-move
     // overlap check. Cached once at spawn to avoid calling GetComponent every frame.
@@ -142,6 +147,17 @@ public class PlayerController : NetworkBehaviour
 
         // Actions must be explicitly enabled before they produce input values.
         _moveAction.Enable();
+
+        // The Attack action (left mouse button / gamepad West) spawns a coin.
+        // It reuses an existing action from the Input Actions asset rather than
+        // adding a new one, keeping the asset tidy for this teaching sample.
+        _fireAction = InputSystem.actions.FindAction("Attack");
+        if (_fireAction == null)
+        {
+            Debug.LogError("[PlayerController] Attack action not found!");
+            return;
+        }
+        _fireAction.Enable();
 
         // Tell the camera to follow this player.
         // Camera.main finds the scene camera tagged "MainCamera".
@@ -231,6 +247,11 @@ public class PlayerController : NetworkBehaviour
         if (GameManager.Instance == null || !GameManager.Instance.GameStarted.Value)
             return;
 
+        // triggered is true for exactly one frame when a button action is performed.
+        // We check _fireAction before movement so a blocked move doesn't prevent firing.
+        if (_fireAction != null && _fireAction.triggered)
+            SpawnCoinServerRpc(transform.position);
+
         // ReadValue<Vector2>() returns the current WASD or stick input this frame:
         // x = horizontal (-1 left, +1 right), y = vertical (-1 back, +1 forward)
         Vector2 input = _moveAction.ReadValue<Vector2>();
@@ -282,6 +303,26 @@ public class PlayerController : NetworkBehaviour
         }
 
         return false;
+    }
+
+    // The owning client sends this RPC to ask the server to spawn a coin.
+    // Spawning always happens on the server — clients never call Spawn() directly.
+    // We accept the position as a parameter because the server cannot reliably read
+    // the client's transform; passing the value explicitly makes the data flow clear.
+    [ServerRpc]
+    private void SpawnCoinServerRpc(Vector3 position)
+    {
+        if (_coinPrefab == null)
+        {
+            Debug.LogError("[PlayerController] Coin Prefab is not assigned on the Player prefab.");
+            return;
+        }
+
+        GameObject coin = Instantiate(_coinPrefab, position, Quaternion.identity);
+
+        // Spawn() registers the object with NGO and replicates it to all clients.
+        // destroyWithScene: true ensures it's cleaned up if the scene is unloaded.
+        coin.GetComponent<NetworkObject>().Spawn(destroyWithScene: true);
     }
 
     private void LateUpdate()
